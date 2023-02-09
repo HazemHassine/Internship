@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch import nn
-
+import numpy as np
 
 
 class DatasetSplit(Dataset):
@@ -20,26 +20,25 @@ class DatasetSplit(Dataset):
         return torch.tensor(image), torch.tensor(label)
 
 class Client:
-    def __init__(self, dataset, idxs, local_epochs, device, optimizer="sgd") -> None:
+    def __init__(self, dataset, idxs, local_epochs, device,local_bs ,optimizer="sgd") -> None:
         self.optimizer = optimizer
         self.local_epochs = local_epochs
         self.device = device
+        self.local_bs = local_bs
         # split indexes for train, validation, and test (80, 10, 10)
         idxs_train = idxs[:int(0.8*len(idxs))]
         idxs_val = idxs[int(0.8*len(idxs)):int(0.9*len(idxs))]
         idxs_test = idxs[int(0.9*len(idxs)):]
 
         self.trainloader = DataLoader(DatasetSplit(dataset, idxs_train),
-                                 batch_size=self.args.local_bs, shuffle=True)
+                                 batch_size=self.local_bs, shuffle=True)
         self.validloader = DataLoader(DatasetSplit(dataset, idxs_val),
                                  batch_size=int(len(idxs_val)/10), shuffle=False)
         self.testloader = DataLoader(DatasetSplit(dataset, idxs_test),
                                 batch_size=int(len(idxs_test)/10), shuffle=False)
-        self.trainloader, self.validloader, self.testloader = self.train_val_test(
-            dataset, list(idxs))
         # To change when you're changing the model
-        self.criterion = nn.NLLLoss().to(self.device)
-
+        self.criterion = nn.CrossEntropyLoss()
+        print(self.trainloader.dataset)
     
     def update_weights(self, model, global_round, lr):
         # Set mode to train model
@@ -61,7 +60,7 @@ class Client:
 
                 model.zero_grad()
                 log_probs = model(images)
-                loss = self.criterion(log_probs, labels)
+                loss = self.criterion(log_probs, labels.squeeze(1))
                 loss.backward()
                 optimizer.step()
 
